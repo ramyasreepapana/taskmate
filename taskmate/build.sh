@@ -51,3 +51,14 @@ flutter build web --release
 
 echo "==> Done. Output is in build/web"
 ls -la build/web | head
+
+# The git repo root is one level above this project folder, and Render looks
+# for the publish directory from the repo root. Copy the bundle up there so
+# "build/web" resolves no matter which way the service is configured.
+if [ -d ../.git ]; then
+  echo "==> Copying bundle to the repo root for Render"
+  rm -rf ../build/web
+  mkdir -p ../build
+  cp -r build/web ../build/web
+  ls -la ../build/web | head -3
+fi
