@@ -1,16 +1,23 @@
 ﻿import 'dart:async';
-import 'package:path/path.dart';
-import 'package:sqflite/sqflite.dart';
-import '../models/task.dart';
 
+import '../models/task.dart';
+import 'task_store.dart';
+// The compiler picks ONE of these. On Android it takes the sqflite file, so
+// sqflite is never compiled into the web bundle - which matters, because the
+// plugin has no web implementation at all.
+import 'task_store_stub.dart'
+    if (dart.library.io) 'task_store_sqflite.dart'
+    if (dart.library.js_interop) 'task_store_web.dart';
+
+/// Unchanged public API. Every screen still calls DatabaseHelper.instance and
+/// the same seven methods; only what sits behind them changed.
 class DatabaseHelper {
   static final DatabaseHelper instance = DatabaseHelper._init();
-  static Database? _database;
 
   DatabaseHelper._init();
 
-  static const String _dbName = 'taskmate.db';
-  static const int _dbVersion = 1;
+  final TaskStore _store = createStore();
+
   static const String tableName = 'tasks';
 
   static const String colId = 'id';
@@ -22,98 +29,18 @@ class DatabaseHelper {
   static const String colIsCompleted = 'is_completed';
   static const String colCreatedAt = 'created_at';
 
-  Future<Database> get database async {
-    if (_database != null) return _database!;
-    _database = await _initDB(_dbName);
-    return _database!;
-  }
+  Future<int> insertTask(Task task) => _store.insertTask(task);
 
-  Future<Database> _initDB(String filePath) async {
-    final dbPath = await getDatabasesPath();
-    final path = join(dbPath, filePath);
+  Future<List<Task>> getTasks() => _store.getTasks();
 
-    return await openDatabase(
-      path,
-      version: _dbVersion,
-      onCreate: _createDB,
-    );
-  }
+  Future<List<Task>> searchTasks(String keyword) => _store.searchTasks(keyword);
 
-  Future<void> _createDB(Database db, int version) async {
-    await db.execute('''
-      CREATE TABLE $tableName (
-        $colId INTEGER PRIMARY KEY AUTOINCREMENT,
-        $colTitle TEXT NOT NULL,
-        $colDescription TEXT NOT NULL,
-        $colSubject TEXT NOT NULL,
-        $colPriority TEXT NOT NULL,
-        $colDueDate TEXT NOT NULL,
-        $colIsCompleted INTEGER NOT NULL DEFAULT 0,
-        $colCreatedAt TEXT NOT NULL
-      )
-    ''');
-  }
+  Future<int> updateTask(Task task) => _store.updateTask(task);
 
-  Future<int> insertTask(Task task) async {
-    final db = await database;
-    return await db.insert(
-      tableName,
-      task.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
-  }
+  Future<int> setTaskCompletion(int id, bool isCompleted) =>
+      _store.setTaskCompletion(id, isCompleted);
 
-  Future<List<Task>> getTasks() async {
-    final db = await database;
-    final result = await db.query(
-      tableName,
-      orderBy: '$colDueDate ASC, $colPriority DESC',
-    );
-    return result.map((json) => Task.fromMap(json)).toList();
-  }
+  Future<int> deleteTask(int id) => _store.deleteTask(id);
 
-  Future<List<Task>> searchTasks(String keyword) async {
-    final db = await database;
-    final result = await db.query(
-      tableName,
-      where: '$colTitle LIKE ? OR $colDescription LIKE ?',
-      whereArgs: ['%$keyword%', '%$keyword%'],
-      orderBy: '$colDueDate ASC',
-    );
-    return result.map((json) => Task.fromMap(json)).toList();
-  }
-
-  Future<int> updateTask(Task task) async {
-    final db = await database;
-    return await db.update(
-      tableName,
-      task.toMap(),
-      where: '$colId = ?',
-      whereArgs: [task.id],
-    );
-  }
-
-  Future<int> setTaskCompletion(int id, bool isCompleted) async {
-    final db = await database;
-    return await db.update(
-      tableName,
-      {colIsCompleted: isCompleted ? 1 : 0},
-      where: '$colId = ?',
-      whereArgs: [id],
-    );
-  }
-
-  Future<int> deleteTask(int id) async {
-    final db = await database;
-    return await db.delete(
-      tableName,
-      where: '$colId = ?',
-      whereArgs: [id],
-    );
-  }
-
-  Future<void> close() async {
-    final db = await database;
-    await db.close();
-  }
+  Future<void> close() => _store.close();
 }

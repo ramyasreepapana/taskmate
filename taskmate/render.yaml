@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: taskmate
+    runtime: static
+    buildCommand: bash build.sh
+    staticPublishPath: build/web
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
